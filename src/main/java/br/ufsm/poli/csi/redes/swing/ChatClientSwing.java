@@ -17,43 +17,48 @@ import java.net.UnknownHostException;
 import java.util.HashSet;
 import java.util.Set;
 
+//interface grafica
 public class ChatClientSwing extends JFrame {
 
-    private Usuario meuUsuario;
-    private JList listaChat;
+    private Usuario meuUsuario; //usuario atual
+    private JList listaChat; //lisa do chat
     private DefaultListModel<Usuario> dfListModel;
-    private JTabbedPane tabbedPane = new JTabbedPane();
-    private Set<Usuario> chatsAbertos = new HashSet<>();
-    private UDPService udpService;
-    private Usuario USER_GERAL = new Usuario("Geral", null, null);
+    private JTabbedPane tabbedPane = new JTabbedPane(); //abas de conversa
+    private Set<Usuario> chatsAbertos = new HashSet<>(); //chats abertos
+    private UDPService udpService; // serviço q envia e recebe mensagem
+    private Usuario USER_GERAL = new Usuario("Geral", null, null); //representação do chat geral
 
+    //inicializa a janela, menus e serviço UDP
     public ChatClientSwing(int portaOrigem, int portaDestino, String ipPadrao) throws UnknownHostException {
-        this.udpService = new UDPServiceImpl(portaOrigem, portaDestino, ipPadrao) {
+        this.udpService = new UDPServiceImpl(portaOrigem, portaDestino, ipPadrao) { //cria a isntancia do serviço
 
             @Override
-            public void usuarioRemovido(Usuario usuario) {
+            public void usuarioRemovido(Usuario usuario) { //remoção do usuario
                 super.usuarioRemovido(usuario);
             }
 
             @Override
-            public void fimChat(Usuario destinatario) {
+            public void fimChat(Usuario destinatario) { //encerra chat
                 System.out.println("Solicitação de FIM DE CHAT para: " + destinatario.getNome());
 
                 new Thread(() -> {
                     try {
-                        Mensagem objMsg = Mensagem.builder()
+                        Mensagem objMsg = Mensagem.builder() //cria objeto do tipo fim_chat
                                 .tipoMensagem(Mensagem.TipoMensagem.fim_chat)
                                 .usuario(this.usuario.getNome())
                                 .status(this.usuario.getStatus().toString())
                                 .msg("Chat encerrado pelo remetente.")
                                 .build();
 
+                        //converte para JSON
                         String jsonMsg = objectMapper.writeValueAsString(objMsg);
                         byte[] buffer = jsonMsg.getBytes();
 
+                        //define destino e posta
                         InetAddress destino = destinatario.getEndereco();
                         int portaFinal = this.portaDestino;
 
+                        //envia pacote
                         DatagramPacket packet = new DatagramPacket(buffer, buffer.length, destino, portaFinal);
                         dtSocket.send(packet);
 
@@ -66,12 +71,16 @@ public class ChatClientSwing extends JFrame {
             }
         };
 
+        //config layout
         setLayout(new GridBagLayout());
+
+        //status do usuario
         JMenuBar menuBar = new JMenuBar();
         JMenu menu = new JMenu("Status");
 
         ButtonGroup group = new ButtonGroup();
 
+        //disponivel
         JRadioButtonMenuItem rbMenuItem = new JRadioButtonMenuItem(Usuario.StatusUsuario.DISPONIVEL.name());
         rbMenuItem.setSelected(true);
         rbMenuItem.addActionListener(e -> {
@@ -81,6 +90,7 @@ public class ChatClientSwing extends JFrame {
         group.add(rbMenuItem);
         menu.add(rbMenuItem);
 
+        //nao perturbe
         rbMenuItem = new JRadioButtonMenuItem(Usuario.StatusUsuario.NAO_PERTURBE.name());
         rbMenuItem.addActionListener(e -> {
             ChatClientSwing.this.meuUsuario.setStatus(Usuario.StatusUsuario.NAO_PERTURBE);
@@ -89,6 +99,7 @@ public class ChatClientSwing extends JFrame {
         group.add(rbMenuItem);
         menu.add(rbMenuItem);
 
+        //volto logo
         rbMenuItem = new JRadioButtonMenuItem(Usuario.StatusUsuario.VOLTO_LOGO.name());
         rbMenuItem.addActionListener(e -> {
             ChatClientSwing.this.meuUsuario.setStatus(Usuario.StatusUsuario.VOLTO_LOGO);
@@ -100,10 +111,12 @@ public class ChatClientSwing extends JFrame {
         menuBar.add(menu);
         this.setJMenuBar(menuBar);
 
+        //abas do chat
         tabbedPane.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
                 super.mousePressed(e);
+                //botão para fechar o chat
                 if (e.getButton() == MouseEvent.BUTTON3) {
                     JPopupMenu popupMenu = new JPopupMenu();
                     final int tab = tabbedPane.getUI().tabForCoordinate(tabbedPane, e.getX(), e.getY());
@@ -122,6 +135,7 @@ public class ChatClientSwing extends JFrame {
             }
         });
 
+        //config das janelas
         add(new JScrollPane(criaLista()), new GridBagConstraints(0, 0, 1, 1, 0.1, 1, GridBagConstraints.WEST,
                 GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
         add(tabbedPane, new GridBagConstraints(1, 0, 1, 1, 1, 1, GridBagConstraints.EAST,
@@ -137,18 +151,23 @@ public class ChatClientSwing extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Chat P2P - Redes de Computadores");
 
+        //inreface para digitar o nome do usuario
         String nomeUsuario = JOptionPane.showInputDialog(this, "Digite seu nome de usuário: ");
         this.meuUsuario = new Usuario(nomeUsuario, Usuario.StatusUsuario.DISPONIVEL, InetAddress.getLocalHost());
         udpService.usuarioAlterado(meuUsuario);
 
+        //add usuarios
         udpService.addListenerMensagem(new MensagemListener());
         udpService.addListenerUsuario(new UsuarioListener());
         setVisible(true);
     }
 
+    //cria listas
     private JComponent criaLista() {
         dfListModel = new DefaultListModel<>();
         listaChat = new JList<>(dfListModel);
+
+        //abre chat privado (2 cliques)
         listaChat.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent evt) {
                 JList list = (JList) evt.getSource();
@@ -161,6 +180,8 @@ public class ChatClientSwing extends JFrame {
                 }
             }
         });
+
+        //chat geral
         chatsAbertos.add(USER_GERAL);
         tabbedPane.add("Geral", new PainelChatPVT(USER_GERAL, true));
         return listaChat;
@@ -169,8 +190,8 @@ public class ChatClientSwing extends JFrame {
     @Getter
     class PainelChatPVT extends JPanel {
 
-        JTextArea areaChat;
-        JTextField campoEntrada;
+        JTextArea areaChat; //area de mensagem
+        JTextField campoEntrada; //campo p digitar
         Usuario usuario;
         boolean chatGeral = false;
 
@@ -181,6 +202,8 @@ public class ChatClientSwing extends JFrame {
             areaChat.setEditable(false);
             campoEntrada = new JTextField();
             this.chatGeral = chatGeral;
+
+            //enter = envia mensagem
             campoEntrada.addActionListener(e -> {
                 String texto = campoEntrada.getText();
                 campoEntrada.setText("");
@@ -195,6 +218,7 @@ public class ChatClientSwing extends JFrame {
 
     }
 
+    //entrar, sair, alterar
     private class UsuarioListener implements UDPServiceUsuarioListener {
 
         @Override
@@ -207,6 +231,7 @@ public class ChatClientSwing extends JFrame {
         public void usuarioRemovido(Usuario usuario) {
             dfListModel.removeElement(usuario);
 
+            //fecha abas ao sair
             for (int i = 1; i < tabbedPane.getTabCount(); i++) {
                 PainelChatPVT p = (PainelChatPVT) tabbedPane.getComponentAt(i);
                 if (p.getUsuario().equals(usuario)) {
@@ -225,15 +250,16 @@ public class ChatClientSwing extends JFrame {
         }
     }
 
+    //mensagens
     private class MensagemListener implements UDPServiceMensagemListener {
 
         @Override
         public void mensagemRecebida(String mensagem, Usuario remetente, boolean chatGeral) {
             PainelChatPVT painel = null;
-            if (chatGeral) {
+            if (chatGeral) { //chat geral
                 painel = (PainelChatPVT) tabbedPane.getComponentAt(0);
             } else {
-                for (int i = 1; i < tabbedPane.getTabCount(); i++) {
+                for (int i = 1; i < tabbedPane.getTabCount(); i++) { //chat privado
                     PainelChatPVT p = (PainelChatPVT) tabbedPane.getComponentAt(i);
                     if (p.getUsuario().equals(remetente)) {
                         painel = p;
@@ -241,9 +267,9 @@ public class ChatClientSwing extends JFrame {
                     }
                 }
             }
-            if (painel != null) {
+            if (painel != null) { //add mensagem
                 painel.getAreaChat().append(remetente.getNome() + "> " + mensagem + "\n");
-            } else {
+            } else { //cria aba
                 if (chatsAbertos.add(remetente)) {
                     PainelChatPVT painelChatPVT = new PainelChatPVT(remetente, false);
                     tabbedPane.add(remetente.toString(), painelChatPVT);
@@ -253,6 +279,7 @@ public class ChatClientSwing extends JFrame {
             }
         }
 
+        //fecha chat do outro usuario
         @Override
         public void fimChatPelaOutraParte(Usuario remetente) {
             for (int i = 1; i < tabbedPane.getTabCount(); i++) {
